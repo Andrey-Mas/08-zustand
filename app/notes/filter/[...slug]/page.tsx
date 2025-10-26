@@ -9,6 +9,29 @@ type Search = { page?: string; query?: string };
 
 const VALID_TAGS: ReadonlyArray<UITag> = ["All","Todo","Work","Personal","Meeting","Shopping"];
 
+import type { Metadata, ResolvingMetadata } from "next";
+
+export async function generateMetadata(
+  { params }: { params: Promise<{ slug?: string[] }> },
+  parent: ResolvingMetadata
+): Promise<Metadata> {
+  const { slug } = await params;
+  const tag = Array.isArray(slug) && slug[0] ? slug[0] : "All";
+  const title = `Notes – Filter: ${tag} | NoteHub`;
+  const description = `Browse notes filtered by "${tag}".`;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `${siteUrl}/notes/filter/${encodeURIComponent(tag)}`,
+      images: [{ url: "https://ac.goit.global/fullstack/react/notehub-og-meta.jpg" }],
+    },
+  };
+}
+
 export default async function NotesPage({
   params,
   searchParams,

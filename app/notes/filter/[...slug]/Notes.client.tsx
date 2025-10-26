@@ -6,12 +6,10 @@ import { useRouter } from "next/navigation";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchNotes } from "@/lib/api";
-import type { FetchNotesResponse, UITag, BackendTag } from "@/types/note";
+import type { FetchNotesResponse, UITag } from "@/types/note";
 import SearchBox from "@/components/SearchBox/SearchBox";
 import Pagination from "@/components/Pagination/Pagination";
 import NoteList from "@/components/NoteList/NoteList";
-import Modal from "@/components/Modal/Modal";
-import NoteForm from "@/components/NoteForm/NoteForm";
 import css from "./NotesPage.module.css";
 
 export default function NotesClient({
@@ -26,32 +24,25 @@ export default function NotesClient({
   const router = useRouter();
   const [page, setPage] = useState(initialPage);
   const [query, setQuery] = useState(initialQuery);
-  const [isCreateOpen, setCreateOpen] = useState(false);
-
-  // ✍️ чернетка зберігається між відкриттями модалки
-  const [draft, setDraft] = useState<{
-    title: string;
-    content: string;
-    tag: BackendTag;
-  }>({
-    title: "",
-    content: "",
-    tag: "Todo",
-  });
-
   const debouncedQuery = useDebounce(query, 400);
 
-  // keep URL in sync
-  useEffect(() => {
+  // Build href reflecting current page/query for the current tag
+  const fromHref = useMemo(() => {
     const params = new URLSearchParams();
     if (page && page !== 1) params.set("page", String(page));
     if (debouncedQuery) params.set("query", debouncedQuery);
-    const qs = params.toString();
-    const href = qs
-      ? `/notes/filter/${encodeURIComponent(initialTag)}?${qs}`
-      : `/notes/filter/${encodeURIComponent(initialTag)}`;
-    router.replace(href, { scroll: false });
-  }, [page, debouncedQuery, initialTag, router]);
+    return `/notes/filter/${encodeURIComponent(initialTag)}${params.toString() ? `?${params}` : ""}`;
+  }, [page, debouncedQuery, initialTag]);
+
+  // Keep URL in sync (no scroll)
+  useEffect(() => {
+    router.replace(fromHref, { scroll: false });
+  }, [fromHref, router]);
+
+  // Reset page when query or tag changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, initialTag]);
 
   // Fetch notes
   const { data, isFetching, isError, error } = useQuery<FetchNotesResponse>({
@@ -63,38 +54,20 @@ export default function NotesClient({
   const totalPages = data?.totalPages ?? 1;
   const notes = data?.items ?? [];
 
-  const fromHref = useMemo(() => {
-    const params = new URLSearchParams();
-    if (page && page !== 1) params.set("page", String(page));
-    if (debouncedQuery) params.set("query", debouncedQuery);
-    return `/notes/filter/${encodeURIComponent(initialTag)}${
-      params.toString() ? `?${params}` : ""
-    }`;
-  }, [page, debouncedQuery, initialTag]);
-
-  // reset page when query changes
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedQuery, initialTag]);
-
   return (
-    <main className={css.container}>
-      <div className={css.headerRow}>
-        <h1 className={css.title}>Notes — {initialTag}</h1>
-        <div className={css.headerActions}>
-          <button
-            className={css.createButton}
-            onClick={() => setCreateOpen(true)}
-          >
-            + New note
-          </button>
-          <Link href="/" className={css.homeLink}>
-            Home
-          </Link>
+    <main className={css.app}>
+      <div className={css.toolbar}>
+        <h1 >Notes — {initialTag}</h1>
+        <div >
+          <Link href="/notes/action/create" className={css.button}>+ Create note</Link>
         </div>
       </div>
 
-      <SearchBox value={query} onChange={setQuery} isLoading={isFetching} />
+      <div className={css.searchRow}>
+        <div className={css.searchRow}>
+        <SearchBox value={query} onChange={setQuery} isLoading={isFetching} />
+      </div>
+      </div>
 
       {isError ? (
         <p className={css.errorText}>{(error as Error).message}</p>
@@ -107,30 +80,6 @@ export default function NotesClient({
             onPageChange={setPage}
           />
         </>
-      )}
-
-      {isCreateOpen && (
-        <Modal
-          title="Create note"
-          closeHref={fromHref}
-          onClose={() => setCreateOpen(false)} // локально закриваємо без навігації
-        >
-          <NoteForm
-            backTo={fromHref}
-            // керовані пропси з чернетки
-            title={draft.title}
-            content={draft.content}
-            tag={draft.tag}
-            onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
-            // успіх: очищаємо чернетку і закриваємо модалку
-            onSuccess={() => {
-              setDraft({ title: "", content: "", tag: "Todo" });
-              setCreateOpen(false);
-            }}
-            // cancel: просто закриваємо модалку, чернетка залишається
-            onCancel={() => setCreateOpen(false)}
-          />
-        </Modal>
       )}
     </main>
   );

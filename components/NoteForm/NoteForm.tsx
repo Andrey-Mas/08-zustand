@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createNote } from "@/lib/api";
 import type { BackendTag } from "@/types/note";
+import { useNoteStore, initialDraft } from "@/lib/store/noteStore";
 import css from "./NoteForm.module.css";
 
 type Props = {
@@ -14,11 +15,8 @@ type Props = {
   title?: string;
   content?: string;
   tag?: BackendTag;
-  onChange?: (
-    p: Partial<{ title: string; content: string; tag: BackendTag }>,
-  ) => void;
 
-  // колбеки
+  onChange?: (patch: Partial<{ title: string; content: string; tag: BackendTag }>) => void;
   onSuccess?: () => void;
   onCancel?: () => void;
 };
@@ -35,7 +33,12 @@ export default function NoteForm({
   const router = useRouter();
   const qc = useQueryClient();
 
-  // якщо передані керовані пропси/колбек — працюємо у controlled-режимі
+  // ========= Draft from Zustand =========
+  const draft = useNoteStore((s) => s.draft);
+  const setDraft = useNoteStore((s) => s.setDraft);
+  const clearDraft = useNoteStore((s) => s.clearDraft);
+
+  // якщо прийшли керовані пропси — працюємо у керованому режимі
   const isControlled = useMemo(
     () =>
       onChange != null ||
@@ -45,82 +48,91 @@ export default function NoteForm({
     [onChange, titleProp, contentProp, tagProp],
   );
 
-  // локальний стан — тільки для некерованого режиму
+  // локальний стан — тільки для некерованого режиму (повністю не використовуємо, тримаємо як fallback)
   const [titleLocal, setTitleLocal] = useState("");
   const [contentLocal, setContentLocal] = useState("");
   const [tagLocal, setTagLocal] = useState<BackendTag>("Todo");
 
-  const title = isControlled ? (titleProp ?? "") : titleLocal;
-  const content = isControlled ? (contentProp ?? "") : contentLocal;
-  const tag = isControlled ? (tagProp ?? "Todo") : tagLocal;
+  // джерело істини для значень полів
+  const title = isControlled ? (titleProp ?? "") : (draft?.title ?? titleLocal);
+  const content = isControlled ? (contentProp ?? "") : (draft?.content ?? contentLocal);
+  const tag = isControlled ? (tagProp ?? "Todo") : ((draft?.tag as BackendTag) ?? tagLocal);
 
-  const setTitle = (v: string) =>
-    isControlled ? onChange?.({ title: v }) : setTitleLocal(v);
-  const setContent = (v: string) =>
-    isControlled ? onChange?.({ content: v }) : setContentLocal(v);
-  const setTag = (v: BackendTag) =>
-    isControlled ? onChange?.({ tag: v }) : setTagLocal(v);
+  // під час монтування у некерованому режимі — якщо немає draft, виставляємо initialDraft
+  useEffect(() => {
+    if (!isControlled) {
+      if (!draft) {
+        setDraft(initialDraft);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isControlled]);
 
-  const {
-    mutateAsync: save,
-    isPending,
-    error,
-    isError,
-  } = useMutation({
-    mutationFn: createNote,
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await createNote({ title, content, tag });
+      return res;
+    },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["notes"] });
-
-      // очищаємо лише локальний стан; у керованому режимі — батько сам чистить
-      if (!isControlled) {
-        setTitleLocal("");
-        setContentLocal("");
-        setTagLocal("Todo");
-      }
-
+      // очищаємо чернетку лише при успішному створенні
+      clearDraft();
       if (onSuccess) onSuccess();
-      else if (backTo) router.push(backTo);
+      // повернення на попередню сторінку
+      router.back();
     },
   });
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await save({ title, content, tag });
-  };
-
   return (
-    <form onSubmit={onSubmit} className={css.form}>
-      <div className={css.formGroup}>
-        <label htmlFor="title">Title</label>
+    <form
+      className={css.form}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!title.trim() || !content.trim()) return;
+        mutation.mutate();
+      }}
+    >
+      <label className={css.formGroup}>
+        <span >Title</span>
         <input
-          id="title"
           className={css.input}
-          type="text"
+          name="title"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (isControlled && onChange) onChange({ title: v });
+            else setDraft({ title: v });
+          }}
           required
         />
-      </div>
+      </label>
 
-      <div className={css.formGroup}>
-        <label htmlFor="content">Content</label>
+      <label className={css.formGroup}>
+        <span >Content</span>
         <textarea
-          id="content"
           className={css.textarea}
+          name="content"
           value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={6}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (isControlled && onChange) onChange({ content: v });
+            else setDraft({ content: v });
+          }}
           required
         />
-      </div>
+      </label>
 
-      <div className={css.formGroup}>
-        <label htmlFor="tag">Tag</label>
+      <label className={css.formGroup}>
+        <span >Tag</span>
         <select
-          id="tag"
           className={css.select}
+          name="tag"
           value={tag}
-          onChange={(e) => setTag(e.target.value as BackendTag)}
+          onChange={(e) => {
+            const v = e.target.value as BackendTag;
+            if (isControlled && onChange) onChange({ tag: v });
+            else setDraft({ tag: v });
+          }}
         >
           <option value="Todo">Todo</option>
           <option value="Work">Work</option>
@@ -128,23 +140,22 @@ export default function NoteForm({
           <option value="Meeting">Meeting</option>
           <option value="Shopping">Shopping</option>
         </select>
-      </div>
-
-      {isError && <p className={css.error}>{error?.message}</p>}
+      </label>
 
       <div className={css.actions}>
+        <button className={css.submitButton} type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? "Saving..." : "Save"}
+        </button>
         <button
-          type="button"
           className={css.cancelButton}
-          onClick={() =>
-            onCancel ? onCancel() : backTo ? router.push(backTo) : null
-          }
+          type="button"
+          onClick={() => {
+            if (onCancel) onCancel();
+            // не очищаємо draft — просто йдемо назад
+            router.back();
+          }}
         >
           Cancel
-        </button>
-
-        <button type="submit" disabled={isPending} className={css.submitButton}>
-          {isPending ? "Saving…" : "Save"}
         </button>
       </div>
     </form>

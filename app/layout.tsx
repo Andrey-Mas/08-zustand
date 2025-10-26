@@ -1,13 +1,35 @@
 // app/layout.tsx
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
+import { Roboto } from "next/font/google";
+import "./globals.css";
 import Providers from "./providers";
 import Header from "../components/Header/Header";
 import Footer from "../components/Footer/Footer";
 
-export const metadata = {
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+export const metadata: Metadata = {
   title: "NoteHub",
   description: "Notes app with filters & modals",
+  openGraph: {
+    title: "NoteHub",
+    description: "Notes app with filters & modals",
+    url: siteUrl,
+    images: [
+      {
+        url: "https://ac.goit.global/fullstack/react/notehub-og-meta.jpg",
+      },
+    ],
+  },
 };
+
+const roboto = Roboto({
+  weight: ["400","500","700"],
+  subsets: ["latin"],
+  variable: "--font-roboto",
+  display: "swap",
+});
 
 export default function RootLayout({
   children,
@@ -17,7 +39,7 @@ export default function RootLayout({
   modal: ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={roboto.variable}>
       <body
         style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}
       >
