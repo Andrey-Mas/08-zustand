@@ -1,18 +1,15 @@
+import type { Metadata } from "next";
 import NoteForm from "@/components/NoteForm/NoteForm";
 import css from "./CreateNote.module.css";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Create a new note – NoteHub",
   description: "Start a fresh note. Your draft is saved automatically.",
   openGraph: {
     title: "Create a new note – NoteHub",
     description: "Start a fresh note. Your draft is saved automatically.",
-    url: "/notes/action/create",
-    images: [
-      {
-        url: "https://ac.goit.global/fullstack/react/notehub-og-meta.jpg",
-      },
-    ],
+    url: (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000") + "/notes/action/create",
+    images: [{ url: "https://ac.goit.global/fullstack/react/notehub-og-meta.jpg" }],
   },
 };
 
